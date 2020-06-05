@@ -1,0 +1,201 @@
+File: readme.txt
+Author: Ziyue Xiao
+----------------------
+
+
+Utilization table
+-----------------
+This table records the utilization of each allocator on different scripts.
+
++-------------------------+------------+-----------+   
+|       file names        |  implicit  | explicit  |
+|                         |  allocator | allocator |
++-------------------------+------------+-----------+
+| example1-nofree.script  |     97%    |    97%    |  
++-------------------------+------------+-----------+
+| example2-recycle.script |     97%    |    97%    |
++-------------------------+------------+-----------+
+| example3-inplace.script |     38%    |    97%    | 
++-------------------------+------------+-----------+
+|example4-coalesce.script |     47%    |    93%    | 
++-------------------------+------------+-----------+
+| pattern-coalesce.script |     36%    |    76%    |
++-------------------------+------------+-----------+
+| pattern-mixed.script    |     77%    |    89%    | 
++-------------------------+------------+-----------+
+| pattern-realloc.script  |     44%    |    85%    |   
++-------------------------+------------+-----------+
+| pattern-recycle.script  |     90%    |    93%    | 
++-------------------------+------------+-----------+
+|  pattern-repeat.script  |     70%    |    92%    |  
++-------------------------+------------+-----------+
+|  pattern-updown.script  |     81%    |    89%    | 
++-------------------------+------------+-----------+
+|      robust.script      |     59%    |    86%    | 
++-------------------------+------------+-----------+
+|    trace-chs.script     |     69%    |    77%    |  
++-------------------------+------------+-----------+
+|   trace-emacs.script    |     95%    |    95%    |   
++-------------------------+------------+-----------+
+|   trace-firefox.script  |     97%    |    97%    |   
++-------------------------+------------+-----------+
+|     trace-gcc.script    |     79%    |    84%    |
++-------------------------+------------+-----------+
+
+
+implicit
+
+--------
+Overview:
+    This allocator keeps track of free blocks by storing block size and
+    status in headers. 
+
+    1) mymallo:
+        mymalloc adopts first fit, it traverses block by block from the beginning
+        and chooses the first one that fits. And it throws remaining space into
+        the allocated memory as extra padding. 
+    2) myfree:
+        myfree updates the header of the freed block memory.
+    3) myremallo:
+        myrealloc first checks if it can reallocate in place without resizing.
+        If approved, then check if the remaining space is sufficient to create
+        a new free block. If in-place reallocation is not supported, it allocates a new
+        block, copies existing content to that region and frees the original block.
+  
+Design:
+    1) first fit
+       I choose first fit because it does not need to traverse all the blocks to
+       find the best block (best fit) or record the place where previous search
+       left off(next fit), so it reduces the time to search and the amount of global data.
+    2) throw remaining space into allocated memory as extra padding
+       Since I want this implicit allocator to support in-place reallocation, the
+       extra padding can be helpful.
+    
+Perfromance:
+    1) Utilization
+        The achieved utilization depends on the script, it ranges from 36% to 97%,
+        and the overall utilization is over 50%.
+    2) Instruction count
+        The instruction counts for each function and overall program under different
+        gcc optimization level is listed in the table below.
+       + ------------+----------+----------+----------+
+       |             |   -Og    |   -O2    |    -O3   |
+       + ------------+----------+----------+----------+
+       |   mymallos  |   907095 |   698706 |  698706  |
+       + ------------+----------+----------+----------+
+       |    myfree   |   2688   |    1821  |   1821   |
+       + ------------+----------+----------+----------+
+       |   myrealloc |   1992   |    1224  |   41519  |
+       + ------------+----------+----------+----------+
+       |    overall  |  917942  |   705220 |  745160  |
+       + ------------+----------+----------+----------+
+    3) Compiler Optimization
+        After optimizing gdb level from Og to O2, the instruction counts decrease
+        greatly, throughput increases by 30%. 
+        
+Strengths:
+    1) This allocator supports in-place reallocation, so it reduces time to search for free blocks
+       -> increases throughput.
+    2) It keeps track of free blocks by creating headers, so it can recycle freed blocks
+       -> increases utilization.
+    
+Weaknesses:
+    1) The allocators must iterate blocks from the beginning every time it allocates memory
+       -> deceases throughput.
+    2) Adjacent free blocks cannot be combined since they are separated by headers
+       -> decreases utilization.
+    3) There are unused bytes in blocks because of padding (internal fragmentation)
+       -> decreases utilization.
+    3) Although this allocator supports in-place reallocation, this ability is
+       limited since it does not support coalescing.
+    
+Optimization:
+    1) To improve utilization, I decided to support in-place reallocation, because I think
+       the paddings of blocks are useful and can compensate for the internal fragmentation.
+    2) To improve throughput, I tried three optimization levels of gcc and found
+       out that O2 worked best for this implicit allocator.
+
+explicit
+--------
+Overview:
+    This explicit heap allocator stores block size and status in headers, and keeps track
+    of free blocks by remembering the start and end of linked list. In addition, linked list
+    in this allocator is sorted with heap address.
+    
+    1) mymalloc:
+        This explicit allocator traverses free blocks following the linked list and chooses
+        the first free block that fits. If remaining space is large enough for another allocation,
+        it replaces original block with a new resized block. If not, it removes that block from
+        the linked list.
+    2) myfree:
+        When a block is freed, if its right neighbor is also free, the right free block absorbs
+        freed block and updates itself in linked list. If not, allocator inserts the freed block into linked list.
+    3) myrealloc:
+        Allocator would first absorb right free blocks until there is no adjacent free blocks
+        on the right and check if the original block can accommodate the reallocation. If in-place reallocation
+        is allowed, check if it is necessary to create a new free block  when the remaning space is large enough.
+        If not, it allocates a new block and copies existing content to that region. 
+        
+Design:
+     1) first fit
+        I also choose first fit for explicit allocator because I want to reduce the time it
+        traverses the linked list. 
+     2) throw remaining space into allocated memory as extra padding
+        I want to make use of the padding space instead of leaving them useless 0-byte headers.
+     3) absorb all the adjacent free blocks on the right when reallocating a block
+        Coalescing all the adjacent free blocks can combine free blocks that used to be separated by headers, it not only
+        increases the probability of in-place reallocation, but also increases utilization.
+     4) the linked list is sorted according to heap address
+        It would be easier to coalesce a pair of blocks if the linked list is sorted with heap address.
+        
+Perfromance:
+    1) Utility:
+       From the utility table, we can see that utility of this explicit allocator ranges from 76% to 97%.
+       The average utility is above 80%. And explicate allocator always perform better than implicit
+       allocators no matter the scripts.  
+        
+    2) Instruction count:
+       the instruction counts for each function and overall program under different gcc optimization
+       level is listed in the table below
+       + ------------+------------+------------+----------+
+       |             |     -Og    |     -O2    |   -O3    |
+       +-------------+------------+------------+----------+
+       |   mymalloc  |   186300   |    129172  |  129867  |
+       +-------------+------------+------------+----------+
+       |    myfree   |    19377   |     12608  |   38930  |
+       +-------------+------------+------------+----------+
+       |  myrealloc  |     3754   |     4025   |   8516   |
+       +-------------+------------+------------+----------+
+       |   overall   |    409979  |    180303  |  179988  |
+       +-------------+------------+------------+----------+
+    3) Compiler Optimization 
+       After optimizing gcc from Og to O2, the instruction counts decrease by 56%, the throughput
+       increases by 127%. If gcc level get further optimized to O3, the instruction counts keeps
+       reducing and throughput gets increased by 0.1%.
+       
+Strengths:
+    1) This implementation keeps track of free blocks using a linked list, it can jump between
+       free blocks rather than iterate all the blocks
+       -> increases throughput
+    2) This allocator supports in-place reallocation by coalescing all the free blocks on the
+       right when reallocating a block, it can combine free blocks separated by headers in this way
+       -> increases utility
+    
+Weaknesses:
+    1) When freeing a block, only the most immediate right neighbor is coalesced, so adjacent
+       free blocks might still be separated by header.
+       -> reduces utilization
+    2) Since each block is at least 16 bytes, and the headers must take 8 bytes, this implementation might
+       cause serious internal fragmentation especially when there are many small-sized allocation requests.
+       -> reduces utilization
+    
+Optimization:
+    1) To optimize utilization, I decided to coalesce all the adjacent when reallocating, since
+       the cost to coalesce two adjacent blocks was   lower than inserting a new block into the
+       linked list, which requires researching for the insertion point. And it increases the probability
+       of in-place reallocation. 
+    2) To increase throughput, I tried three optimization levels of gcc. O3 achieved highest throughput
+       with only 179988 instruction counts, which was only half of that when gcc level was Og.
+       In addition, explicit allocator performed way better than implicit allocators. 
+     
+

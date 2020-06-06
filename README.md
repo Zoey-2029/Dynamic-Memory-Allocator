@@ -72,7 +72,7 @@ A bump allocator is is a heap allocator design that simply allocates the next av
   * **throughput**: malloc and free execute only a handful of instructions, so it is ultra fast.
 
 ### Implicit free list allocator
-<img width="1033" alt="Screen Shot 2020-06-05 at 10 54 49 PM" src="https://user-images.githubusercontent.com/55666152/83937201-a1797c00-a77f-11ea-9265-54b20bc5b7a4.png">
+<img width="1033" alt="Screen Shot 2020-06-05 at 10 54 49 PM" src="https://user-images.githubusercontent.com/55666152/83937774-94ab5700-a784-11ea-9cac-ec0f90e766fb.png">
 
 * **mymalloc**: 
   mymalloc adopts first fit, it traverses block by block from the beginning and chooses the first one that fits. And it throws remaining space into the allocated memory as extra padding. 
@@ -85,7 +85,7 @@ A bump allocator is is a heap allocator design that simply allocates the next av
   * **throughput**: This allocator supports in-place reallocation, reducing time to search for free blocksincreases throughput. Optimizing level of gcc compiler from Og to O2 can further increase throughput by 30%.
 
 ### Explicit free list allocator
-<img width="1090" alt="Screen Shot 2020-06-05 at 11 27 04 PM" src="https://user-images.githubusercontent.com/55666152/83937722-1e0e5980-a784-11ea-981f-3a7778f9d4af.png">
+<img width="1032" alt="Screen Shot 2020-06-05 at 11 28 58 PM" src="https://user-images.githubusercontent.com/55666152/83937775-9543ed80-a784-11ea-8b3d-4d6f198b02f4.png">
 
 * **mymalloc**: 
   This explicit allocator traverses free blocks following the linked list and chooses the first free block that fits. If remaining space is large enough for another allocation, it replaces original block with a new resized block. If not, it removes that block from the linked list.

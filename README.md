@@ -7,7 +7,7 @@ This program implements three types of heap allocators, including **bump allocat
 * **allocator.h**: a file containing function prototypes for functionality in each of the allocators
 * **segment.h, segment.c**: supporting files that provides the heap segment size and heap segment start.
 * **perfromance.txt**: evaluation of utilization and throughput of implicit  allocators and explicit allocators on various scripts. 
-* **Scripts/**:
+* **scripts/**:
   An allocator script is a file that contains a sequence of requests in a compact text-based format. The three request types are a (allocate) r(reallocate) and f (free). Each request has an id-number that can be referred to in a subsequent realloc or free.
   
   ```
@@ -31,7 +31,7 @@ This program implements three types of heap allocators, including **bump allocat
   ptr1 = myrealloc(ptr1, 300);
   myfree(ptr1);
   ```
-  Scripts folder contains three types of test scripts:
+  scripts folder contains three types of test scripts:
   * example scripts have workloads targeted to test a particular allocator feature. These scripts are very small (< 10 requests), easily traced, and especially useful for early development and debugging. These are much too small to be useful for performance measurements.
   * pattern scripts were mechanically constructed from various pattern templates (e.g. 500 mallocs followed by 500 frees or 500 malloc-free pairs). The scripts make enough requests (about 1,000) that they become useful for measuring performance, albeit on a fairly artificial workload. 
   * trace scripts contain real-world workloads capturing by tracing executing programs. These scripts are large (> 5,000 requests), exhibit diverse behaviors, and useful for comprehensive correctness testing. They also give broad measurement of performance you might expect to get "out in the wild".
@@ -85,7 +85,7 @@ A bump allocator is is a heap allocator design that simply allocates the next av
   * **throughput**: This allocator supports in-place reallocation, reducing time to search for free blocksincreases throughput. Optimizing level of gcc compiler from Og to O2 can further increase throughput by 30%.
 
 ### Explicit free list allocator
-<img width="1032" alt="Screen Shot 2020-06-05 at 11 28 58 PM" src="https://user-images.githubusercontent.com/55666152/83937775-9543ed80-a784-11ea-8b3d-4d6f198b02f4.png">
+<img width="1433" alt="Screen Shot 2020-06-06 at 3 17 34 PM" src="https://user-images.githubusercontent.com/55666152/83955593-20ff5d80-a809-11ea-9eb2-1a9bd39e1f2e.png">
 
 * **mymalloc**: 
   This explicit allocator traverses free blocks following the linked list and chooses the first free block that fits. If remaining space is large enough for another allocation, it replaces original block with a new resized block. If not, it removes that block from the linked list.
